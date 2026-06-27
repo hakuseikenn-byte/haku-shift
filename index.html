@@ -327,7 +327,7 @@
 // ── Config ──────────────────────────────────────────────────────────────────
 const SUPABASE_URL = 'https://hqddrswyqmammuwwrvna.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_766-Q62xxyGNiARJhTg13A_lb7YxuEQ';
-const ADMIN_PASSWORD = 'haku2026'; // ← 変更可能
+let ADMIN_PASSWORD = 'haku2026'; // Supabaseから読み込まれます
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -414,7 +414,10 @@ function renderStaffLoginList() {
 // ── Load settings ────────────────────────────────────────────────────────────
 async function loadSettings() {
   const { data } = await sb.from('shift_settings').select('*').eq('id',1).single();
-  if (data) settings = data;
+  if (data) {
+    settings = data;
+    if (data.admin_password) ADMIN_PASSWORD = data.admin_password;
+  }
 }
 
 // ── Load shifts for current month ─────────────────────────────────────────────
@@ -733,6 +736,16 @@ async function renderAdmin() {
       </div>
       <p class="setting-hint">※ 週${settings.insurance_threshold_weekly}h以上で雇用保険加入義務（法定：週20h）</p>
       <button class="btn-primary" style="margin-top:12px;" onclick="saveSettings()">設定を保存</button>
+    </div>
+
+    <div class="admin-card">
+      <div class="section-title">🔑 管理者パスワード変更</div>
+      <div class="form-col">
+        <input type="password" id="pw-current" placeholder="現在のパスワード" />
+        <input type="password" id="pw-new" placeholder="新しいパスワード" />
+        <input type="password" id="pw-confirm" placeholder="新しいパスワード（確認）" />
+        <button class="btn-primary" onclick="changeAdminPassword()">パスワードを変更</button>
+      </div>
     </div>`;
 
   // Add staff card
