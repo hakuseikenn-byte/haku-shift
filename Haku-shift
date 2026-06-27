@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Haku シフト管理</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif;
+    background: #f5f3ef;
+    color: #222;
+    min-height: 100vh;
+  }
+
+  /* ── Toast ── */
+  #toast {
+    position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+    padding: 10px 22px; border-radius: 8px; color: #fff;
+    font-size: 14px; font-weight: 600; z-index: 9999;
+    box-shadow: 0 4px 16px rgba(0,0,0,.2);
+    display: none; white-space: nowrap;
+  }
+
+  /* ── Header ── */
+  #header {
+    background: #2c3e50; color: #fff;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 16px; height: 52px;
+    position: sticky; top: 0; z-index: 100;
+    display: none;
+  }
+  .header-logo { font-weight: 800; font-size: 18px; color: #d4af7a; letter-spacing: 2px; }
+  .header-user { font-size: 12px; color: rgba(255,255,255,.65); margin-left: 8px; }
+  .header-nav { display: flex; gap: 6px; align-items: center; }
+  .nav-btn {
+    padding: 5px 12px; background: transparent;
+    border: 1px solid rgba(255,255,255,.25); border-radius: 6px;
+    color: rgba(255,255,255,.7); font-size: 13px; cursor: pointer;
+  }
+  .nav-btn.active { background: rgba(255,255,255,.15); color: #fff; border-color: rgba(255,255,255,.5); }
+  .logout-btn {
+    padding: 5px 10px; background: transparent; border: none;
+    color: rgba(255,255,255,.45); font-size: 12px; cursor: pointer;
+  }
+
+  /* ── Screens ── */
+  .screen { display: none; }
+  .screen.active { display: block; }
+
+  /* ── Login ── */
+  #login-screen {
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(135deg, #2c3e50 0%, #4a6741 100%);
+    padding: 16px;
+  }
+  .login-card {
+    background: #fff; border-radius: 18px; padding: 32px 26px;
+    width: 100%; max-width: 370px;
+    box-shadow: 0 8px 32px rgba(0,0,0,.2);
+  }
+  .login-logo { text-align: center; margin-bottom: 26px; }
+  .logo-mark {
+    display: block; width: 54px; height: 54px; line-height: 54px;
+    border-radius: 50%; background: #2c3e50; color: #d4af7a;
+    font-size: 26px; font-weight: 800; margin: 0 auto 10px; letter-spacing: 1px;
+  }
+  .logo-name { font-weight: 700; font-size: 16px; color: #2c3e50; letter-spacing: 1px; }
+  .logo-sub { font-size: 12px; color: #888; margin-top: 4px; letter-spacing: 2px; }
+
+  .tab-bar {
+    display: flex; border-radius: 8px; overflow: hidden;
+    border: 1px solid #e0e0e0; margin-bottom: 20px;
+  }
+  .tab-btn {
+    flex: 1; padding: 9px 0; background: #f8f6f2; border: none;
+    cursor: pointer; font-size: 13px; color: #666; font-weight: 600;
+    transition: all .15s;
+  }
+  .tab-btn.active { background: #2c3e50; color: #fff; }
+
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  .staff-list { display: flex; flex-direction: column; gap: 8px; }
+  .staff-login-btn {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 14px; background: #f8f6f2;
+    border: 1px solid #e0e0e0; border-radius: 10px;
+    cursor: pointer; font-size: 15px; color: #2c3e50; font-weight: 600;
+    width: 100%; transition: background .12s;
+  }
+  .staff-login-btn:hover { background: #eee; }
+
+  .avatar {
+    width: 34px; height: 34px; border-radius: 50%;
+    background: #2c3e50; color: #d4af7a;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 15px; flex-shrink: 0;
+  }
+  .avatar.sm { width: 26px; height: 26px; font-size: 12px; }
+
+  .form-col { display: flex; flex-direction: column; gap: 12px; }
+  input, select {
+    padding: 10px 12px; border-radius: 8px; border: 1px solid #d0d0d0;
+    font-size: 14px; outline: none; background: #fafafa; color: #222;
+    width: 100%; font-family: inherit;
+  }
+  .btn-primary {
+    padding: 12px 0; background: #2c3e50; color: #fff;
+    border: none; border-radius: 8px; font-weight: 700;
+    font-size: 14px; cursor: pointer; letter-spacing: 1px; width: 100%;
+  }
+  .btn-sm {
+    padding: 5px 14px; border: none; border-radius: 6px;
+    font-size: 12px; cursor: pointer; font-weight: 700;
+  }
+  .btn-green { background: #2c5f2e; color: #fff; }
+  .btn-gray { background: #ddd; color: #555; }
+  .btn-red { background: #c0392b; color: #fff; }
+  .btn-dark { background: #2c3e50; color: #fff; }
+
+  .empty-hint { text-align: center; color: #999; font-size: 13px; line-height: 1.8; padding: 16px 0; }
+
+  /* ── Calendar ── */
+  #cal-screen { max-width: 520px; margin: 0 auto; padding: 16px 12px 48px; }
+
+  .month-nav {
+    display: flex; align-items: center; justify-content: center;
+    gap: 24px; margin-bottom: 14px;
+  }
+  .month-title { font-weight: 800; font-size: 20px; color: #2c3e50; letter-spacing: 1px; }
+  .arrow-btn {
+    background: none; border: none; font-size: 30px;
+    cursor: pointer; color: #2c3e50; padding: 0 8px; line-height: 1;
+  }
+
+  .summary-card {
+    background: #fff; border-radius: 12px; padding: 14px 16px;
+    margin-bottom: 14px; box-shadow: 0 2px 8px rgba(0,0,0,.06);
+  }
+  .summary-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .summary-label { font-size: 13px; color: #666; }
+  .summary-val { font-size: 14px; color: #2c3e50; }
+  .progress-bg { height: 6px; border-radius: 99px; background: #eee; overflow: hidden; margin-bottom: 8px; }
+  .progress-fill { height: 100%; border-radius: 99px; transition: width .4s; }
+  .warning-badge {
+    background: #fef9e7; border: 1px solid #f0c040;
+    border-radius: 8px; padding: 7px 10px;
+    font-size: 12px; color: #7d6608; margin-top: 4px;
+  }
+
+  .cal-grid {
+    display: grid; grid-template-columns: repeat(7,1fr);
+    gap: 3px; margin-bottom: 14px;
+  }
+  .day-header {
+    text-align: center; font-size: 12px; font-weight: 700;
+    padding: 6px 0; letter-spacing: 1px;
+  }
+  .cal-day {
+    position: relative; border: 1px solid #e0e0e0; border-radius: 8px;
+    padding: 5px 3px 3px; min-height: 44px; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center;
+    background: #fff; transition: all .12s;
+  }
+  .cal-day.selected { background: #2c3e50 !important; border-color: #2c3e50; }
+  .cal-day.has-my-shift { background: #eaf4e8; }
+  .cal-day-num { font-size: 14px; font-weight: 700; line-height: 1; }
+  .cal-day.selected .cal-day-num { color: #fff !important; }
+  .dot-badge {
+    margin-top: 3px; background: #2c3e50; color: #fff;
+    border-radius: 99px; font-size: 10px; padding: 1px 5px; font-weight: 700;
+  }
+  .cal-day.selected .dot-badge { background: rgba(255,255,255,.3); }
+  .my-dot { font-size: 8px; color: #2c5f2e; margin-top: 2px; }
+
+  /* Day panel */
+  .day-panel {
+    background: #fff; border-radius: 14px; padding: 16px;
+    margin-bottom: 14px; box-shadow: 0 2px 10px rgba(0,0,0,.07);
+  }
+  .day-panel-title {
+    font-weight: 800; font-size: 16px; color: #2c3e50;
+    margin-bottom: 14px; padding-bottom: 8px;
+    border-bottom: 2px solid #f0ede8;
+  }
+  .shift-row {
+    margin-bottom: 14px; padding-bottom: 14px;
+    border-bottom: 1px solid #f0ede8;
+  }
+  .shift-row:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+  .shift-staff-name {
+    display: flex; align-items: center; gap: 8px;
+    font-weight: 600; font-size: 14px; color: #2c3e50; margin-bottom: 8px;
+  }
+  .hours-tag { font-size: 11px; color: #888; margin-left: 4px; }
+  .shift-info { display: flex; align-items: center; gap: 10px; }
+  .shift-badge {
+    background: #eaf4e8; color: #2c5f2e;
+    border-radius: 6px; padding: 4px 10px; font-size: 13px; font-weight: 600;
+  }
+  .remove-shift-btn {
+    background: none; border: none; color: #c0392b;
+    cursor: pointer; font-size: 18px; padding: 0 4px; line-height: 1;
+  }
+  .shift-selector { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  select.sm { width: auto; padding: 6px 8px; font-size: 13px; }
+  input.sm { width: 80px; padding: 6px 8px; font-size: 13px; }
+  .add-shift-btn {
+    background: none; border: 1px dashed #bbb; border-radius: 7px;
+    color: #777; padding: 5px 12px; font-size: 13px; cursor: pointer;
+  }
+  .rest-label { color: #bbb; font-size: 12px; }
+
+  /* Admin summary on cal page */
+  .admin-month-summary {
+    background: #fff; border-radius: 14px; padding: 16px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.06);
+  }
+  .section-title { font-weight: 800; font-size: 15px; color: #2c3e50; margin-bottom: 14px; }
+  .admin-staff-row { margin-bottom: 12px; }
+  .admin-staff-name { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13px; margin-bottom: 4px; }
+  .admin-staff-hours { font-size: 12px; color: #555; margin-top: 3px; }
+
+  /* ── Admin Screen ── */
+  #admin-screen { max-width: 520px; margin: 0 auto; padding: 16px 12px 48px; display: flex; flex-direction: column; gap: 16px; }
+  .admin-card {
+    background: #fff; border-radius: 14px; padding: 16px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.06);
+  }
+  .setting-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .setting-label { font-size: 13px; color: #555; }
+  .setting-input { width: 100px; }
+  .setting-hint { font-size: 11px; color: #888; margin-top: 4px; }
+  .staff-card {
+    background: #f8f6f2; border-radius: 10px; padding: 12px 14px; margin-bottom: 10px;
+  }
+  .staff-card-name { display: flex; align-items: center; gap: 8px; font-weight: 600; margin-bottom: 4px; }
+  .staff-card-info { font-size: 12px; color: #777; margin-bottom: 4px; }
+  .staff-card-hours { font-size: 12px; color: #555; margin-bottom: 8px; }
+  .staff-card-btns { display: flex; gap: 8px; }
+  .edit-form { display: flex; flex-direction: column; gap: 8px; }
+  .edit-form-btns { display: flex; gap: 8px; }
+
+  /* loading */
+  .loading { text-align: center; color: #aaa; font-size: 13px; padding: 20px 0; }
+
+  /* spinner */
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner {
+    display: inline-block; width: 18px; height: 18px;
+    border: 2px solid #ddd; border-top-color: #2c3e50;
+    border-radius: 50%; animation: spin .7s linear infinite;
+    vertical-align: middle; margin-right: 6px;
+  }
+</style>
+</head>
+<body>
+
+<div id="toast"></div>
+
+<!-- Header -->
+<div id="header">
+  <div style="display:flex;align-items:center;gap:8px;">
+    <span class="header-logo">Haku</span>
+    <span class="header-user" id="header-user-name"></span>
+  </div>
+  <div class="header-nav">
+    <button class="nav-btn active" id="nav-cal" onclick="showScreen('cal')">📅 シフト</button>
+    <button class="nav-btn" id="nav-admin" onclick="showScreen('admin')" style="display:none;">⚙ 管理</button>
+    <button class="logout-btn" onclick="logout()">退出</button>
+  </div>
+</div>
+
+<!-- LOGIN -->
+<div id="login-screen" class="screen active">
+  <div class="login-card">
+    <div class="login-logo">
+      <span class="logo-mark">H</span>
+      <span class="logo-name">Café La Petite Haku</span>
+      <span class="logo-sub">シフト管理</span>
+    </div>
+
+    <div class="tab-bar">
+      <button class="tab-btn active" onclick="switchTab('staff')">スタッフ</button>
+      <button class="tab-btn" onclick="switchTab('register')">新規登録</button>
+      <button class="tab-btn" onclick="switchTab('admin')">管理者</button>
+    </div>
+
+    <!-- Staff login -->
+    <div class="tab-panel active" id="tab-staff">
+      <div id="staff-list-login" class="staff-list">
+        <div class="loading"><span class="spinner"></span>読み込み中…</div>
+      </div>
+    </div>
+
+    <!-- Register -->
+    <div class="tab-panel" id="tab-register">
+      <div class="form-col">
+        <input type="text" id="reg-name" placeholder="お名前（例：田中）" />
+        <input type="number" id="reg-wage" placeholder="時給（円）例：1100" />
+        <input type="number" id="reg-max" placeholder="月最大時間（空白=デフォルト）" />
+        <button class="btn-primary" onclick="registerStaff()">登録する</button>
+      </div>
+    </div>
+
+    <!-- Admin login -->
+    <div class="tab-panel" id="tab-admin">
+      <div class="form-col">
+        <input type="password" id="admin-pw" placeholder="管理者パスワード"
+          onkeydown="if(event.key==='Enter')adminLogin()" />
+        <button class="btn-primary" onclick="adminLogin()">ログイン</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CALENDAR -->
+<div id="cal-screen" class="screen"></div>
+
+<!-- ADMIN -->
+<div id="admin-screen" class="screen"></div>
+
+<script>
+// ── Config ──────────────────────────────────────────────────────────────────
+const SUPABASE_URL = 'https://hqddrswyqmammuwwrvna.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_766-Q62xxyGNiARJhTg13A_lb7YxuEQ';
+const ADMIN_PASSWORD = 'haku2026'; // ← 変更可能
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ── State ────────────────────────────────────────────────────────────────────
+let currentUser = null; // { id, name, role }
+let staffList = [];
+let shiftsCache = {}; // { 'YYYY-MM': { day: { staffId: {type,hours} } } }
+let settings = { wage_per_hour: 1100, max_hours_per_month: 80, insurance_threshold_weekly: 20 };
+let calYear = new Date().getFullYear();
+let calMonth = new Date().getMonth();
+let selectedDay = null;
+let editingStaffId = null;
+
+const SHIFT_TYPES = {
+  morning:  { label: '早番 09-13', hours: 4 },
+  afternoon:{ label: '遅番 13-17', hours: 4 },
+  fullday:  { label: '通し 09-17', hours: 8 },
+  custom:   { label: 'カスタム',   hours: null },
+};
+const DAYS_JP = ['日','月','火','水','木','金','土'];
+
+// ── Toast ────────────────────────────────────────────────────────────────────
+function toast(msg, type='ok') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.background = type === 'err' ? '#c0392b' : '#2c5f2e';
+  el.style.display = 'block';
+  clearTimeout(window._toastTimer);
+  window._toastTimer = setTimeout(() => el.style.display = 'none', 2800);
+}
+
+// ── Screen router ────────────────────────────────────────────────────────────
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  if (name === 'login') {
+    document.getElementById('login-screen').classList.add('active');
+    document.getElementById('header').style.display = 'none';
+  } else if (name === 'cal') {
+    document.getElementById('cal-screen').classList.add('active');
+    document.getElementById('nav-cal').classList.add('active');
+    document.getElementById('header').style.display = 'flex';
+    renderCalendar();
+  } else if (name === 'admin') {
+    document.getElementById('admin-screen').classList.add('active');
+    document.getElementById('nav-admin').classList.add('active');
+    document.getElementById('header').style.display = 'flex';
+    renderAdmin();
+  }
+}
+
+// ── Tab switcher ─────────────────────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach((b,i) => {
+    b.classList.toggle('active', ['staff','register','admin'][i] === name);
+  });
+  document.querySelectorAll('.tab-panel').forEach((p,i) => {
+    p.classList.toggle('active', ['tab-staff','tab-register','tab-admin'][i] === 'tab-'+name);
+  });
+}
+
+// ── Load staff ────────────────────────────────────────────────────────────────
+async function loadStaff() {
+  const { data, error } = await sb.from('shift_staff').select('*').order('created_at');
+  if (error) { toast('スタッフ読み込みエラー','err'); return; }
+  staffList = data || [];
+  renderStaffLoginList();
+}
+
+function renderStaffLoginList() {
+  const el = document.getElementById('staff-list-login');
+  if (staffList.length === 0) {
+    el.innerHTML = '<p class="empty-hint">まだスタッフが登録されていません。<br>「新規登録」から追加してください。</p>';
+    return;
+  }
+  el.innerHTML = staffList.map(s => `
+    <button class="staff-login-btn" onclick="loginAsStaff('${s.id}','${s.name}')">
+      <span class="avatar">${s.name[0]}</span>
+      <span>${s.name}</span>
+    </button>
+  `).join('');
+}
+
+// ── Load settings ────────────────────────────────────────────────────────────
+async function loadSettings() {
+  const { data } = await sb.from('shift_settings').select('*').eq('id',1).single();
+  if (data) settings = data;
+}
+
+// ── Load shifts for current month ─────────────────────────────────────────────
+async function loadShiftsForMonth(year, month) {
+  const mk = monthKey(year, month);
+  const { data } = await sb.from('shift_records')
+    .select('*, shift_staff(name)')
+    .eq('year', year).eq('month', month + 1);
+  const map = {};
+  (data || []).forEach(r => {
+    if (!map[r.day]) map[r.day] = {};
+    map[r.day][r.staff_id] = { type: r.shift_type, hours: r.hours, recordId: r.id };
+  });
+  shiftsCache[mk] = map;
+}
+
+// ── Auth ──────────────────────────────────────────────────────────────────────
+function loginAsStaff(id, name) {
+  currentUser = { id, name, role: 'staff' };
+  document.getElementById('header-user-name').textContent = name;
+  document.getElementById('nav-admin').style.display = 'none';
+  showScreen('cal');
+}
+
+function adminLogin() {
+  const pw = document.getElementById('admin-pw').value;
+  if (pw !== ADMIN_PASSWORD) { toast('パスワードが違います','err'); return; }
+  currentUser = { id: 'admin', name: '管理者', role: 'admin' };
+  document.getElementById('header-user-name').textContent = '管理者';
+  document.getElementById('nav-admin').style.display = 'block';
+  showScreen('cal');
+}
+
+async function registerStaff() {
+  const name = document.getElementById('reg-name').value.trim();
+  const wage = parseInt(document.getElementById('reg-wage').value) || settings.wage_per_hour;
+  const maxH = parseInt(document.getElementById('reg-max').value) || settings.max_hours_per_month;
+  if (!name) { toast('名前を入力してください','err'); return; }
+  if (staffList.find(s => s.name === name)) { toast('同じ名前が既にあります','err'); return; }
+  const { data, error } = await sb.from('shift_staff').insert({ name, wage, max_hours: maxH }).select().single();
+  if (error) { toast('登録に失敗しました','err'); return; }
+  staffList.push(data);
+  renderStaffLoginList();
+  toast(`${name} を登録しました`);
+  document.getElementById('reg-name').value = '';
+  document.getElementById('reg-wage').value = '';
+  document.getElementById('reg-max').value = '';
+  switchTab('staff');
+}
+
+function logout() {
+  currentUser = null;
+  selectedDay = null;
+  document.getElementById('admin-pw').value = '';
+  showScreen('login');
+}
+
+// ── Monthly hours ─────────────────────────────────────────────────────────────
+function getMonthlyHours() {
+  const mk = monthKey(calYear, calMonth);
+  const dayMap = shiftsCache[mk] || {};
+  const result = {};
+  staffList.forEach(s => result[s.id] = 0);
+  Object.values(dayMap).forEach(d => {
+    Object.entries(d).forEach(([sid, sh]) => {
+      result[sid] = (result[sid] || 0) + (sh.hours || 0);
+    });
+  });
+  return result;
+}
+
+// ── Calendar render ───────────────────────────────────────────────────────────
+async function renderCalendar() {
+  const el = document.getElementById('cal-screen');
+  el.innerHTML = '<div class="loading"><span class="spinner"></span>読み込み中…</div>';
+  await loadShiftsForMonth(calYear, calMonth);
+  const mk = monthKey(calYear, calMonth);
+  const dayMap = shiftsCache[mk] || {};
+  const monthlyHours = getMonthlyHours();
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+  const firstDow = new Date(calYear, calMonth, 1).getDay();
+
+  // Insurance warning for staff
+  let warningHtml = '';
+  if (currentUser.role === 'staff') {
+    const me = staffList.find(s => s.id === currentUser.id);
+    const myH = monthlyHours[currentUser.id] || 0;
+    const max = me?.max_hours || settings.max_hours_per_month;
+    const wage = me?.wage || settings.wage_per_hour;
+    const pct = Math.min(myH / max * 100, 100);
+    const fillColor = pct > 90 ? '#c0392b' : pct > 70 ? '#e67e22' : '#2c5f2e';
+    const weeksInMonth = daysInMonth / 7;
+    const weekH = myH / weeksInMonth;
+    const threshold = settings.insurance_threshold_weekly;
+    const warnHtml = weekH >= threshold * 0.85
+      ? `<div class="warning-badge">⚠ 週${weekH.toFixed(1)}h — 雇用保険の加入基準（週${threshold}h）に近づいています</div>`
+      : '';
+    warningHtml = `
+      <div class="summary-card">
+        <div class="summary-row">
+          <span class="summary-label">今月の勤務時間</span>
+          <span class="summary-val"><strong>${myH}h</strong> / ${max}h</span>
+        </div>
+        <div class="progress-bg">
+          <div class="progress-fill" style="width:${pct}%;background:${fillColor};"></div>
+        </div>
+        <div class="summary-row">
+          <span class="summary-label">推定給与</span>
+          <span class="summary-val">¥${(myH * wage).toLocaleString()}</span>
+        </div>
+        ${warnHtml}
+      </div>`;
+  }
+
+  // Calendar grid
+  let gridHtml = DAYS_JP.map((d,i) =>
+    `<div class="day-header" style="color:${i===0?'#c0392b':i===6?'#2471a3':'#555'}">${d}</div>`
+  ).join('');
+  for (let i = 0; i < firstDow; i++) gridHtml += '<div></div>';
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dow = (firstDow + day - 1) % 7;
+    const numColor = dow === 0 ? '#c0392b' : dow === 6 ? '#2471a3' : '#222';
+    const shifts = dayMap[day] || {};
+    const count = Object.keys(shifts).length;
+    const myShift = currentUser.role !== 'admin' && shifts[currentUser.id];
+    const isSel = selectedDay === day;
+    gridHtml += `
+      <button class="cal-day${isSel?' selected':''}${myShift&&!isSel?' has-my-shift':''}"
+        onclick="selectDay(${day})">
+        <span class="cal-day-num" style="color:${isSel?'#fff':numColor}">${day}</span>
+        ${count > 0 ? `<span class="dot-badge">${count}</span>` : ''}
+        ${myShift && !isSel ? '<span class="my-dot">●</span>' : ''}
+      </button>`;
+  }
+
+  // Day panel
+  let dayPanelHtml = '';
+  if (selectedDay) {
+    dayPanelHtml = renderDayPanel(selectedDay, dayMap[selectedDay] || {}, monthlyHours);
+  }
+
+  // Admin month summary
+  let adminSummaryHtml = '';
+  if (currentUser.role === 'admin') {
+    const rows = staffList.map(s => {
+      const h = monthlyHours[s.id] || 0;
+      const max = s.max_hours || settings.max_hours_per_month;
+      const pct = Math.min(h / max * 100, 100);
+      const fillColor = pct > 90 ? '#c0392b' : '#2c5f2e';
+      return `
+        <div class="admin-staff-row">
+          <div class="admin-staff-name">
+            <span class="avatar sm">${s.name[0]}</span>${s.name}
+          </div>
+          <div class="progress-bg" style="margin-bottom:3px;">
+            <div class="progress-fill" style="width:${pct}%;background:${fillColor};"></div>
+          </div>
+          <div class="admin-staff-hours">${h}h / ${max}h　¥${(h*(s.wage||settings.wage_per_hour)).toLocaleString()}</div>
+        </div>`;
+    }).join('');
+    adminSummaryHtml = `
+      <div class="admin-month-summary">
+        <div class="section-title">今月のスタッフ時間</div>
+        ${staffList.length === 0 ? '<p class="empty-hint">スタッフがいません</p>' : rows}
+      </div>`;
+  }
+
+  el.innerHTML = `
+    <div class="month-nav">
+      <button class="arrow-btn" onclick="changeMonth(-1)">‹</button>
+      <span class="month-title">${calYear}年${calMonth+1}月</span>
+      <button class="arrow-btn" onclick="changeMonth(1)">›</button>
+    </div>
+    ${warningHtml}
+    <div class="cal-grid">${gridHtml}</div>
+    ${dayPanelHtml}
+    ${adminSummaryHtml}
+  `;
+}
+
+function renderDayPanel(day, dayShifts, monthlyHours) {
+  const displayStaff = currentUser.role === 'admin'
+    ? staffList
+    : staffList.filter(s => s.id === currentUser.id);
+
+  const rows = displayStaff.map(s => {
+    const shift = dayShifts[s.id];
+    const h = monthlyHours[s.id] || 0;
+    const max = s.max_hours || settings.max_hours_per_month;
+    const canEdit = currentUser.role === 'admin' || currentUser.id === s.id;
+
+    let content = '';
+    if (shift) {
+      const label = shift.type === 'custom' ? `カスタム ${shift.hours}h` : SHIFT_TYPES[shift.type]?.label || shift.type;
+      content = `
+        <div class="shift-info">
+          <span class="shift-badge">${label}</span>
+          ${canEdit ? `<button class="remove-shift-btn" onclick="removeShift(${day},'${s.id}')">✕</button>` : ''}
+        </div>`;
+    } else if (canEdit) {
+      content = `
+        <div class="shift-selector" id="sel-${s.id}">
+          <button class="add-shift-btn" onclick="showShiftSelector('${s.id}',${day},${h},${max})">＋ シフト追加</button>
+        </div>`;
+    } else {
+      content = '<span class="rest-label">休み</span>';
+    }
+
+    return `
+      <div class="shift-row">
+        <div class="shift-staff-name">
+          <span class="avatar sm">${s.name[0]}</span>
+          ${s.name}
+          <span class="hours-tag">${h}h/${max}h</span>
+        </div>
+        ${content}
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="day-panel">
+      <div class="day-panel-title">${calMonth+1}月${day}日のシフト</div>
+      ${rows}
+    </div>`;
+}
+
+function showShiftSelector(staffId, day, currentH, max) {
+  const el = document.getElementById(`sel-${staffId}`);
+  el.innerHTML = `
+    <select class="sm" id="stype-${staffId}">
+      <option value="morning">早番 09-13（4h）</option>
+      <option value="afternoon">遅番 13-17（4h）</option>
+      <option value="fullday">通し 09-17（8h）</option>
+      <option value="custom">カスタム</option>
+    </select>
+    <input type="number" class="sm" id="scustom-${staffId}" placeholder="時間" style="display:none;" />
+    <button class="btn-sm btn-green" onclick="confirmShift('${staffId}',${day},${currentH},${max})">確定</button>
+    <button class="btn-sm btn-gray" onclick="renderCalendar()">戻る</button>
+  `;
+  document.getElementById(`stype-${staffId}`).addEventListener('change', function() {
+    document.getElementById(`scustom-${staffId}`).style.display = this.value === 'custom' ? 'inline-block' : 'none';
+  });
+}
+
+async function confirmShift(staffId, day, currentH, max) {
+  const type = document.getElementById(`stype-${staffId}`).value;
+  const customVal = parseFloat(document.getElementById(`scustom-${staffId}`).value) || 0;
+  const hours = type === 'custom' ? customVal : SHIFT_TYPES[type].hours;
+
+  if (currentH + hours > max) {
+    if (!confirm(`上限${max}hを超えます。それでも追加しますか？`)) return;
+  }
+
+  const mk = monthKey(calYear, calMonth);
+  // Upsert
+  const { error } = await sb.from('shift_records').upsert({
+    staff_id: staffId,
+    year: calYear,
+    month: calMonth + 1,
+    day,
+    shift_type: type,
+    hours,
+  }, { onConflict: 'staff_id,year,month,day' });
+
+  if (error) { toast('保存に失敗しました','err'); return; }
+  toast('シフトを追加しました');
+  await loadShiftsForMonth(calYear, calMonth);
+  renderCalendar();
+}
+
+async function removeShift(day, staffId) {
+  const mk = monthKey(calYear, calMonth);
+  const shift = (shiftsCache[mk]?.[day])?.[staffId];
+  if (!shift) return;
+
+  const { error } = await sb.from('shift_records').delete().eq('id', shift.recordId);
+  if (error) { toast('削除に失敗しました','err'); return; }
+  toast('シフトを削除しました');
+  await loadShiftsForMonth(calYear, calMonth);
+  renderCalendar();
+}
+
+function selectDay(day) {
+  selectedDay = selectedDay === day ? null : day;
+  renderCalendar();
+}
+
+async function changeMonth(delta) {
+  calMonth += delta;
+  if (calMonth > 11) { calMonth = 0; calYear++; }
+  if (calMonth < 0)  { calMonth = 11; calYear--; }
+  selectedDay = null;
+  await renderCalendar();
+}
+
+// ── Admin render ──────────────────────────────────────────────────────────────
+async function renderAdmin() {
+  const monthlyHours = getMonthlyHours();
+  const el = document.getElementById('admin-screen');
+
+  // Settings card
+  const settingsHtml = `
+    <div class="admin-card">
+      <div class="section-title">⚙ グローバル設定</div>
+      <div class="setting-row">
+        <span class="setting-label">デフォルト時給（円）</span>
+        <input type="number" class="setting-input" id="s-wage" value="${settings.wage_per_hour}" />
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">月最大時間（デフォルト）</span>
+        <input type="number" class="setting-input" id="s-max" value="${settings.max_hours_per_month}" />
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">雇用保険警告（週時間）</span>
+        <input type="number" class="setting-input" id="s-ins" value="${settings.insurance_threshold_weekly}" />
+      </div>
+      <p class="setting-hint">※ 週${settings.insurance_threshold_weekly}h以上で雇用保険加入義務（法定：週20h）</p>
+      <button class="btn-primary" style="margin-top:12px;" onclick="saveSettings()">設定を保存</button>
+    </div>`;
+
+  // Add staff card
+  const addStaffHtml = `
+    <div class="admin-card">
+      <div class="section-title">＋ スタッフ追加</div>
+      <div class="form-col">
+        <input type="text" id="a-name" placeholder="名前" />
+        <input type="number" id="a-wage" placeholder="時給（円）" />
+        <input type="number" id="a-max" placeholder="月最大時間" />
+        <button class="btn-primary" onclick="adminAddStaff()">追加する</button>
+      </div>
+    </div>`;
+
+  // Staff list
+  const staffRows = staffList.map(s => {
+    const h = monthlyHours[s.id] || 0;
+    if (editingStaffId === s.id) {
+      return `
+        <div class="staff-card">
+          <div class="edit-form">
+            <input type="text" id="e-name-${s.id}" value="${s.name}" placeholder="名前" />
+            <input type="number" id="e-wage-${s.id}" value="${s.wage}" placeholder="時給" />
+            <input type="number" id="e-max-${s.id}" value="${s.max_hours}" placeholder="月最大時間" />
+            <div class="edit-form-btns">
+              <button class="btn-sm btn-green" onclick="saveStaffEdit('${s.id}')">保存</button>
+              <button class="btn-sm btn-gray" onclick="editingStaffId=null;renderAdmin()">キャンセル</button>
+            </div>
+          </div>
+        </div>`;
+    }
+    return `
+      <div class="staff-card">
+        <div class="staff-card-name">
+          <span class="avatar sm">${s.name[0]}</span>
+          <strong>${s.name}</strong>
+        </div>
+        <div class="staff-card-info">時給 ¥${s.wage}　月最大 ${s.max_hours}h</div>
+        <div class="staff-card-hours">今月: ${h}h　推定 ¥${(h*s.wage).toLocaleString()}</div>
+        <div class="staff-card-btns">
+          <button class="btn-sm btn-dark" onclick="editingStaffId='${s.id}';renderAdmin()">編集</button>
+          <button class="btn-sm btn-red" onclick="deleteStaff('${s.id}','${s.name}')">削除</button>
+        </div>
+      </div>`;
+  }).join('');
+
+  const staffListHtml = `
+    <div class="admin-card">
+      <div class="section-title">👥 スタッフ一覧</div>
+      ${staffList.length === 0 ? '<p class="empty-hint">スタッフがいません</p>' : staffRows}
+    </div>`;
+
+  el.innerHTML = settingsHtml + addStaffHtml + staffListHtml;
+}
+
+async function saveSettings() {
+  const wage = parseInt(document.getElementById('s-wage').value) || 1100;
+  const max  = parseInt(document.getElementById('s-max').value) || 80;
+  const ins  = parseInt(document.getElementById('s-ins').value) || 20;
+  const { error } = await sb.from('shift_settings').upsert({
+    id: 1, wage_per_hour: wage, max_hours_per_month: max, insurance_threshold_weekly: ins
+  });
+  if (error) { toast('保存に失敗しました','err'); return; }
+  settings = { wage_per_hour: wage, max_hours_per_month: max, insurance_threshold_weekly: ins };
+  toast('設定を保存しました');
+  renderAdmin();
+}
+
+async function adminAddStaff() {
+  const name = document.getElementById('a-name').value.trim();
+  const wage = parseInt(document.getElementById('a-wage').value) || settings.wage_per_hour;
+  const maxH = parseInt(document.getElementById('a-max').value) || settings.max_hours_per_month;
+  if (!name) { toast('名前を入力してください','err'); return; }
+  if (staffList.find(s => s.name === name)) { toast('同じ名前が既にあります','err'); return; }
+  const { data, error } = await sb.from('shift_staff').insert({ name, wage, max_hours: maxH }).select().single();
+  if (error) { toast('追加に失敗しました','err'); return; }
+  staffList.push(data);
+  toast(`${name} を追加しました`);
+  renderAdmin();
+}
+
+async function saveStaffEdit(id) {
+  const name = document.getElementById(`e-name-${id}`).value.trim();
+  const wage = parseInt(document.getElementById(`e-wage-${id}`).value);
+  const maxH = parseInt(document.getElementById(`e-max-${id}`).value);
+  if (!name) { toast('名前を入力してください','err'); return; }
+  const { error } = await sb.from('shift_staff').update({ name, wage, max_hours: maxH }).eq('id', id);
+  if (error) { toast('更新に失敗しました','err'); return; }
+  staffList = staffList.map(s => s.id === id ? { ...s, name, wage, max_hours: maxH } : s);
+  editingStaffId = null;
+  toast('更新しました');
+  renderAdmin();
+}
+
+async function deleteStaff(id, name) {
+  if (!confirm(`${name} を削除しますか？\nシフトデータも全て削除されます。`)) return;
+  const { error } = await sb.from('shift_staff').delete().eq('id', id);
+  if (error) { toast('削除に失敗しました','err'); return; }
+  staffList = staffList.filter(s => s.id !== id);
+  toast(`${name} を削除しました`);
+  renderAdmin();
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function monthKey(y, m) { return `${y}-${String(m+1).padStart(2,'0')}`; }
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+async function init() {
+  await Promise.all([loadStaff(), loadSettings()]);
+}
+init();
+</script>
+</body>
+</html>
